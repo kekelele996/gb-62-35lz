@@ -96,12 +96,13 @@ export const pointsApi = {
 };
 
 export const messageApi = {
-  send: (data: { receiverId: string; content?: string; image?: string }) => 
+  send: (data: { receiverId: string; content?: string; image?: string }) =>
     api.post('/messages', data),
   getConversations: () => api.get('/messages/conversations'),
-  getMessages: (otherUserId: string, params?: { page?: number; limit?: number }) => 
+  getMessages: (otherUserId: string, params?: { page?: number; limit?: number }) =>
     api.get(`/messages/${otherUserId}`, { params }),
   getUnreadCount: () => api.get('/messages/unread-count'),
+  recall: (messageId: string) => api.post(`/messages/${messageId}/recall`),
 };
 
 export const challengeApi = {

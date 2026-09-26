@@ -2,6 +2,9 @@ import { Request, Response } from 'express';
 import { AuthRequest } from '../middleware/auth';
 import prisma from '../config/prisma';
 
+// 撤回时限：5 分钟
+const RECALL_TIME_LIMIT_MS = 5 * 60 * 1000;
+
 export const sendMessage = async (req: AuthRequest, res: Response) => {
   const { receiverId, content, image } = req.body;
   const senderId = req.userId!;
@@ -42,6 +45,58 @@ export const sendMessage = async (req: AuthRequest, res: Response) => {
   }
 };
 
+export const recallMessage = async (req: AuthRequest, res: Response) => {
+  const { messageId } = req.params;
+  const currentUserId = req.userId!;
+
+  try {
+    const message = await prisma.message.findUnique({
+      where: { id: messageId }
+    });
+
+    if (!message) {
+      return res.status(404).json({ error: '消息不存在' });
+    }
+
+    if (message.senderId !== currentUserId) {
+      return res.status(403).json({ error: '只能撤回自己发送的消息' });
+    }
+
+    if (message.isRecalled) {
+      return res.status(400).json({ error: '消息已撤回' });
+    }
+
+    if (Date.now() - message.createdAt.getTime() > RECALL_TIME_LIMIT_MS) {
+      return res.status(403).json({ error: '消息发送超过五分钟，无法撤回' });
+    }
+
+    const recalledMessage = await prisma.message.update({
+      where: { id: messageId },
+      data: {
+        isRecalled: true,
+        recalledAt: new Date(),
+        content: null,
+        image: null,
+        // 撤回的消息不再计入未读
+        isRead: true
+      },
+      include: {
+        sender: {
+          select: {
+            id: true,
+            username: true,
+            avatar: true
+          }
+        }
+      }
+    });
+
+    res.json({ message: '撤回成功', data: recalledMessage });
+  } catch (error) {
+    res.status(500).json({ error: '撤回失败' });
+  }
+};
+
 export const getMessages = async (req: AuthRequest, res: Response) => {
   const { otherUserId } = req.params;
   const currentUserId = req.userId!;
@@ -74,7 +129,8 @@ export const getMessages = async (req: AuthRequest, res: Response) => {
       where: {
         senderId: otherUserId,
         receiverId: currentUserId,
-        isRead: false
+        isRead: false,
+        isRecalled: false
       },
       data: { isRead: true }
     });
@@ -137,7 +193,11 @@ export const getConversations = async (req: AuthRequest, res: Response) => {
       }
 
       const conversation = conversations.get(otherUserId);
-      if (msg.receiverId === currentUserId && !msg.isRead) {
+      if (
+        msg.receiverId === currentUserId &&
+        !msg.isRead &&
+        !msg.isRecalled
+      ) {
         conversation.unreadCount++;
       }
     });
@@ -157,7 +217,8 @@ export const getUnreadCount = async (req: AuthRequest, res: Response) => {
     const count = await prisma.message.count({
       where: {
         receiverId: currentUserId,
-        isRead: false
+        isRead: false,
+        isRecalled: false
       }
     });
 

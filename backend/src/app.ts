@@ -75,7 +75,7 @@ io.on('connection', (socket) => {
 
     try {
       const unreadCount = await prisma.message.count({
-        where: { receiverId, isRead: false }
+        where: { receiverId, isRead: false, isRecalled: false }
       });
       io.to(`user:${receiverId}`).emit('unread-count', { count: unreadCount });
     } catch (error) {

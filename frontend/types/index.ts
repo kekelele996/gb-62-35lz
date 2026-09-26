@@ -77,9 +77,11 @@ export interface Message {
   id: string;
   senderId: string;
   receiverId: string;
-  content?: string;
-  image?: string;
+  content?: string | null;
+  image?: string | null;
   isRead: boolean;
+  isRecalled: boolean;
+  recalledAt?: string | null;
   sender: Pick<User, 'id' | 'username' | 'avatar'>;
   receiver: Pick<User, 'id' | 'username' | 'avatar'>;
   createdAt: string;

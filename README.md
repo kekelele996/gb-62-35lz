@@ -211,6 +211,7 @@ npm run dev
 - `GET /api/messages/conversations` - 获取会话列表
 - `GET /api/messages/:userId` - 获取与某人的消息
 - `POST /api/messages` - 发送消息
+- `POST /api/messages/:messageId/recall` - 撤回消息（限发送人五分钟内）
 
 ## License
 

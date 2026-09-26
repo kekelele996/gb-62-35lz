@@ -7,13 +7,20 @@ import { useAuth } from '@/context/AuthContext';
 import { messageApi, uploadApi } from '@/lib/api';
 import { formatTime } from '@/lib/time';
 import { Conversation, Message } from '@/types';
-import { 
-  ArrowLeft, 
+import {
+  ArrowLeft,
   Send,
   Image as ImageIcon,
   User as UserIcon,
-  MessageCircle
+  MessageCircle,
+  RotateCcw
 } from 'lucide-react';
+
+// 撤回时限：5 分钟
+const RECALL_LIMIT_MS = 5 * 60 * 1000;
+
+const canRecall = (msg: Message) =>
+  !msg.isRecalled && Date.now() - new Date(msg.createdAt).getTime() < RECALL_LIMIT_MS;
 
 export default function MessagesPage() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -22,6 +29,7 @@ export default function MessagesPage() {
   const [newMessage, setNewMessage] = useState('');
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
+  const [recallingId, setRecallingId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { user } = useAuth();
   const router = useRouter();
@@ -75,11 +83,34 @@ export default function MessagesPage() {
         content: messageText
       });
       loadMessages(selectedConversation);
+      loadConversations();
     } catch (error) {
       setNewMessage(messageText);
       alert('发送失败');
     } finally {
       setSending(false);
+    }
+  };
+
+  const handleRecall = async (messageId: string) => {
+    if (recallingId) return;
+    if (!window.confirm('确定撤回这条消息吗？')) return;
+
+    setRecallingId(messageId);
+    try {
+      await messageApi.recall(messageId);
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === messageId
+            ? { ...msg, isRecalled: true, content: null, image: null }
+            : msg
+        )
+      );
+      loadConversations();
+    } catch (error: any) {
+      alert(error?.response?.data?.error || '撤回失败');
+    } finally {
+      setRecallingId(null);
     }
   };
 
@@ -156,7 +187,9 @@ export default function MessagesPage() {
                       </span>
                     </div>
                     <p className="text-sm text-gray-500 truncate mt-0.5">
-                      {conv.lastMessage.content || '[图片]'}
+                      {conv.lastMessage.isRecalled
+                        ? '消息已撤回'
+                        : conv.lastMessage.content || '[图片]'}
                     </p>
                   </div>
                 </button>
@@ -181,10 +214,21 @@ export default function MessagesPage() {
                 <div className="flex-1 overflow-y-auto p-4 space-y-4">
                   {messages.map((msg) => {
                     const isMe = msg.senderId === user?.id;
+
+                    if (msg.isRecalled) {
+                      return (
+                        <div key={msg.id} className="flex justify-center">
+                          <p className="text-xs text-gray-400">
+                            消息已撤回
+                          </p>
+                        </div>
+                      );
+                    }
+
                     return (
                       <div
                         key={msg.id}
-                        className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}
+                        className={`group flex ${isMe ? 'justify-end' : 'justify-start'}`}
                       >
                         <div className={`max-w-[70%] ${
                           isMe ? 'order-2' : 'order-1'
@@ -203,11 +247,25 @@ export default function MessagesPage() {
                               />
                             )}
                           </div>
-                          <p className={`text-xs text-gray-400 mt-1 ${
-                            isMe ? 'text-right' : 'text-left'
+                          <div className={`flex items-center gap-2 mt-1 ${
+                            isMe ? 'justify-end' : 'justify-start'
                           }`}>
-                            {formatTime(msg.createdAt)}
-                          </p>
+                            <p className="text-xs text-gray-400">
+                              {formatTime(msg.createdAt)}
+                            </p>
+                            {isMe && canRecall(msg) && (
+                              <button
+                                type="button"
+                                onClick={() => handleRecall(msg.id)}
+                                disabled={recallingId === msg.id}
+                                className="flex items-center gap-0.5 text-xs text-gray-400 hover:text-green-600 disabled:opacity-50"
+                                title="撤回"
+                              >
+                                <RotateCcw className="w-3 h-3" />
+                                撤回
+                              </button>
+                            )}
+                          </div>
                         </div>
                       </div>
                     );
