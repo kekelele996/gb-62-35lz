@@ -225,9 +225,11 @@ model Message {
   content     String?
   image       String?
   isRead      Boolean   @default(false)
-  
+  isRecalled  Boolean   @default(false)
+  recalledAt  DateTime?
+
   createdAt   DateTime  @default(now())
-  
+
   @@map("messages")
 }
 

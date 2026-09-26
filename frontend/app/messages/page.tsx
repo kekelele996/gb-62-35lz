@@ -7,13 +7,22 @@ import { useAuth } from '@/context/AuthContext';
 import { messageApi, uploadApi } from '@/lib/api';
 import { formatTime } from '@/lib/time';
 import { Conversation, Message } from '@/types';
-import { 
-  ArrowLeft, 
+import {
+  ArrowLeft,
   Send,
   Image as ImageIcon,
   User as UserIcon,
-  MessageCircle
+  MessageCircle,
+  Undo2
 } from 'lucide-react';
+
+// 与后端一致的撤回时间窗：5 分钟
+const RECALL_WINDOW_MS = 5 * 60 * 1000;
+
+const canRecall = (msg: Message, currentUserId?: string) =>
+  msg.senderId === currentUserId &&
+  !msg.isRecalled &&
+  Date.now() - new Date(msg.createdAt).getTime() <= RECALL_WINDOW_MS;
 
 export default function MessagesPage() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -80,6 +89,22 @@ export default function MessagesPage() {
       alert('发送失败');
     } finally {
       setSending(false);
+    }
+  };
+
+  const handleRecall = async (messageId: string) => {
+    if (!selectedConversation) return;
+
+    try {
+      await messageApi.recall(messageId);
+      // 同步刷新消息列表和会话列表（最后一条消息、未读数）
+      await Promise.all([
+        loadMessages(selectedConversation),
+        loadConversations()
+      ]);
+    } catch (error: any) {
+      alert(error.response?.data?.error || '撤回失败');
+      loadMessages(selectedConversation);
     }
   };
 
@@ -156,7 +181,9 @@ export default function MessagesPage() {
                       </span>
                     </div>
                     <p className="text-sm text-gray-500 truncate mt-0.5">
-                      {conv.lastMessage.content || '[图片]'}
+                      {conv.lastMessage.isRecalled
+                        ? (conv.lastMessage.senderId === user?.id ? '你撤回了一条消息' : '对方撤回了一条消息')
+                        : (conv.lastMessage.content || '[图片]')}
                     </p>
                   </div>
                 </button>
@@ -181,11 +208,31 @@ export default function MessagesPage() {
                 <div className="flex-1 overflow-y-auto p-4 space-y-4">
                   {messages.map((msg) => {
                     const isMe = msg.senderId === user?.id;
+
+                    if (msg.isRecalled) {
+                      return (
+                        <div key={msg.id} className="flex justify-center">
+                          <span className="text-xs text-gray-400 bg-gray-50 px-3 py-1 rounded-full">
+                            {isMe ? '你撤回了一条消息' : '对方撤回了一条消息'}
+                          </span>
+                        </div>
+                      );
+                    }
+
                     return (
                       <div
                         key={msg.id}
-                        className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}
+                        className={`group flex items-center ${isMe ? 'justify-end' : 'justify-start'}`}
                       >
+                        {canRecall(msg, user?.id) && (
+                          <button
+                            onClick={() => handleRecall(msg.id)}
+                            className="opacity-0 group-hover:opacity-100 transition-opacity mr-2 p-1.5 text-gray-400 hover:text-green-600 hover:bg-gray-100 rounded-lg"
+                            title="撤回"
+                          >
+                            <Undo2 className="w-4 h-4" />
+                          </button>
+                        )}
                         <div className={`max-w-[70%] ${
                           isMe ? 'order-2' : 'order-1'
                         }`}>

@@ -80,6 +80,8 @@ export interface Message {
   content?: string;
   image?: string;
   isRead: boolean;
+  isRecalled: boolean;
+  recalledAt?: string;
   sender: Pick<User, 'id' | 'username' | 'avatar'>;
   receiver: Pick<User, 'id' | 'username' | 'avatar'>;
   createdAt: string;
